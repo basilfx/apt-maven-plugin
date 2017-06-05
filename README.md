@@ -12,9 +12,9 @@ The supported goals are
 Here is an example of a configuration
 
     <plugin>
-        <groupId>com.mysema.maven</groupId>
+        <groupId>com.barrypitman</groupId>
         <artifactId>apt-maven-plugin</artifactId>
-        <version>1.1.3</version>
+        <version>1.1.4</version>
         <executions>
             <execution>
                 <goals>
