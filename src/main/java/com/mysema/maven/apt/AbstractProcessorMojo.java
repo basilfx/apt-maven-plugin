@@ -338,95 +338,102 @@ public abstract class AbstractProcessorMojo extends AbstractMojo {
         if ("true".equals(System.getProperty("maven.apt.skip"))) {
         	return;
         }
-        
-        if (!getOutputDirectory().exists()) {
-            getOutputDirectory().mkdirs();
-        }
 
-        // make sure to add compileSourceRoots also during configuration build in m2e context
-        if (isForTest()) {
-            project.addTestCompileSourceRoot(getOutputDirectory().getAbsolutePath());
-        } else {
-            project.addCompileSourceRoot(getOutputDirectory().getAbsolutePath());
-        }
+        if (isOutputStale()) {
 
-        Set<File> sourceDirectories = getSourceDirectories();
-
-        getLog().debug("Using build context: " + buildContext);
-
-        StandardJavaFileManager fileManager = null;
-
-        try {
-            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-            if (compiler == null) {
-                throw new MojoExecutionException("You need to run build with JDK or have tools.jar on the classpath."
-                        + "If this occures during eclipse build make sure you run eclipse under JDK as well");
+            if (!getOutputDirectory().exists()) {
+                getOutputDirectory().mkdirs();
             }
 
-            Set<File> files = filterFiles(sourceDirectories);
-            if (files.isEmpty()) {
-                getLog().debug("No Java sources found (skipping)");
-                return;
+            // make sure to add compileSourceRoots also during configuration build in m2e context
+            if (isForTest()) {
+                project.addTestCompileSourceRoot(getOutputDirectory().getAbsolutePath());
+            } else {
+                project.addCompileSourceRoot(getOutputDirectory().getAbsolutePath());
             }
 
-            fileManager = compiler.getStandardFileManager(null, null, null);
-            Iterable<? extends JavaFileObject> compilationUnits1 = fileManager.getJavaFileObjectsFromFiles(files);
-            // clean all markers
-            for (JavaFileObject javaFileObject : compilationUnits1) {
-            	buildContext.removeMessages(new File(javaFileObject.toUri().getPath()));
-            }
+            Set<File> sourceDirectories = getSourceDirectories();
+            getLog().debug("Using build context: " + buildContext);
 
-            String compileClassPath = buildCompileClasspath();
+            StandardJavaFileManager fileManager = null;
 
-            String processor = buildProcessor();
-
-            String outputDirectory = getOutputDirectory().getPath();
-            File tempDirectory = null;
-
-            if (buildContext.isIncremental()) {
-                tempDirectory = new File(project.getBuild().getDirectory(), "apt"+System.currentTimeMillis());
-                tempDirectory.mkdirs();
-                outputDirectory = tempDirectory.getAbsolutePath();
-            }
-
-            List<String> compilerOptions = buildCompilerOptions(processor, compileClassPath, outputDirectory);
-
-            Writer out = null;
-            if (logOnlyOnError) {
-                out = new StringWriter();
-            }
-            ExecutorService executor = Executors.newSingleThreadExecutor();
             try {
-                DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<JavaFileObject>();
-                CompilationTask task = compiler.getTask(out, fileManager, diagnosticCollector, compilerOptions, null, compilationUnits1);
-                Future<Boolean> future = executor.submit(task);
-                Boolean rv = future.get();
-
-                if (Boolean.FALSE.equals(rv) && logOnlyOnError) {
-                    getLog().error(out.toString());
+                JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+                if (compiler == null) {
+                    throw new MojoExecutionException("You need to run build with JDK or have tools.jar on the classpath."
+                            + "If this occures during eclipse build make sure you run eclipse under JDK as well");
                 }
-                processDiagnostics(diagnosticCollector.getDiagnostics());
-            } finally {
-                executor.shutdown();
-                if (tempDirectory != null) {
-                    FileSync.syncFiles(tempDirectory, getOutputDirectory());
-                    FileUtils.deleteDirectory(tempDirectory);
-                }
-            }
 
-            buildContext.refresh(getOutputDirectory());
-        } catch (Exception e1) {
-            getLog().error("execute error", e1);
-            throw new MojoExecutionException(e1.getMessage(), e1);
-            
-        } finally {
-            if (fileManager != null) {
+
+                Set<File> files = filterFiles(sourceDirectories);
+                if (files.isEmpty()) {
+                    getLog().debug("No Java sources found (skipping)");
+                    return;
+                }
+
+                fileManager = compiler.getStandardFileManager(null, null, null);
+                Iterable<? extends JavaFileObject> compilationUnits1 = fileManager.getJavaFileObjectsFromFiles(files);
+                // clean all markers
+                for (JavaFileObject javaFileObject : compilationUnits1) {
+                    buildContext.removeMessages(new File(javaFileObject.toUri().getPath()));
+                }
+
+                String compileClassPath = buildCompileClasspath();
+
+                String processor = buildProcessor();
+
+                String outputDirectory = getOutputDirectory().getPath();
+                File tempDirectory = null;
+
+                if (buildContext.isIncremental()) {
+                    tempDirectory = new File(project.getBuild().getDirectory(), "apt" + System.currentTimeMillis());
+                    tempDirectory.mkdirs();
+                    outputDirectory = tempDirectory.getAbsolutePath();
+                }
+
+                List<String> compilerOptions = buildCompilerOptions(processor, compileClassPath, outputDirectory);
+
+                Writer out = null;
+                if (logOnlyOnError) {
+                    out = new StringWriter();
+                }
+                ExecutorService executor = Executors.newSingleThreadExecutor();
                 try {
-                    fileManager.close();
-                } catch (Exception e) {
-                    getLog().warn("Unable to close fileManager", e);
+                    DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<JavaFileObject>();
+                    CompilationTask task = compiler.getTask(out, fileManager, diagnosticCollector, compilerOptions, null, compilationUnits1);
+                    Future<Boolean> future = executor.submit(task);
+                    Boolean rv = future.get();
+
+                    if (Boolean.FALSE.equals(rv) && logOnlyOnError) {
+                        getLog().error(out.toString());
+                    }
+                    processDiagnostics(diagnosticCollector.getDiagnostics());
+                } finally {
+                    executor.shutdown();
+                    if (tempDirectory != null) {
+                        FileSync.syncFiles(tempDirectory, getOutputDirectory());
+                        FileUtils.deleteDirectory(tempDirectory);
+                    }
+                }
+
+                buildContext.refresh(getOutputDirectory());
+                touchStaleFile();
+
+            } catch (Exception e1) {
+                getLog().error("execute error", e1);
+                throw new MojoExecutionException(e1.getMessage(), e1);
+
+            } finally {
+                if (fileManager != null) {
+                    try {
+                        fileManager.close();
+                    } catch (Exception e) {
+                        getLog().warn("Unable to close fileManager", e);
+                    }
                 }
             }
+        } else {
+            getLog().info("No changes detected in source files - skipping source generation.");
         }
     }
 
@@ -480,6 +487,49 @@ public abstract class AbstractProcessorMojo extends AbstractMojo {
     protected boolean isForTest() {
         return false;
     }
+
+    /**
+     * Returns true if any one of the files in the XSD/XJB array is newer than
+     * the <code>staleFlag</code> file.
+     *
+     * @return True if any input file has been modified since the last build.
+     */
+    private boolean isOutputStale()
+            throws MojoExecutionException {
+        // We don't use BuildContext for staleness detection, but use the stale flag
+        // approach regardless of the runtime environment.
+
+        Set<File> sourceDirectories = getSourceDirectories();
+        Set<File> files = filterFiles(sourceDirectories);
+        boolean stale = !getStaleFile().exists();
+        if (!stale) {
+            getLog().debug("Stale flag file exists, comparing to xsds and xjbs.");
+            long staleMod = getStaleFile().lastModified();
+
+            for (File file : files) {
+                if (file.lastModified() > staleMod) {
+                    getLog().debug(file.toString() + " is newer than the stale flag file.");
+                    stale = true;
+                    break;
+                }
+            }
+        }
+        return stale;
+    }
+
+    private void touchStaleFile()
+            throws IOException {
+
+        if (!getStaleFile().exists()) {
+            getStaleFile().getParentFile().mkdirs();
+            getStaleFile().createNewFile();
+            getLog().debug("Stale flag file created.");
+        } else {
+            getStaleFile().setLastModified(System.currentTimeMillis());
+        }
+    }
+
+    protected abstract File getStaleFile();
 
     public void setBuildContext(BuildContext buildContext) {
         this.buildContext = buildContext;
