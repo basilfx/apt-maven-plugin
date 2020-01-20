@@ -14,7 +14,7 @@ Here is an example of a configuration
     <plugin>
         <groupId>net.basilfx</groupId>
         <artifactId>apt-maven-plugin</artifactId>
-        <version>1.1.5</version>
+        <version>1.1.6</version>
         <executions>
             <execution>
                 <goals>
