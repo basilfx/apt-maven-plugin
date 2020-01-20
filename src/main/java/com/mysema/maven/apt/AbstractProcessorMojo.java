@@ -344,8 +344,8 @@ public abstract class AbstractProcessorMojo extends AbstractMojo {
         if (!getOutputDirectory().exists()) {
             getOutputDirectory().mkdirs();
 
-            // cannot be stale if output directory did not exist
-            stale = false;
+            // must be stale if output directory did not exist
+            stale = true;
         }
 
         // make sure to add compileSourceRoots also during configuration build in m2e context
