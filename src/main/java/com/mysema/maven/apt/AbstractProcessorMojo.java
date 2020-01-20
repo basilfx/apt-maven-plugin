@@ -334,24 +334,28 @@ public abstract class AbstractProcessorMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
         if (getOutputDirectory() == null) {
         	return;
-        }        
+        }
         if ("true".equals(System.getProperty("maven.apt.skip"))) {
         	return;
         }
 
-        if (isOutputStale()) {
+        boolean stale = isOutputStale();
 
-            if (!getOutputDirectory().exists()) {
-                getOutputDirectory().mkdirs();
-            }
+        if (!getOutputDirectory().exists()) {
+            getOutputDirectory().mkdirs();
 
-            // make sure to add compileSourceRoots also during configuration build in m2e context
-            if (isForTest()) {
-                project.addTestCompileSourceRoot(getOutputDirectory().getAbsolutePath());
-            } else {
-                project.addCompileSourceRoot(getOutputDirectory().getAbsolutePath());
-            }
+            // cannot be stale if output directory did not exist
+            stale = false;
+        }
 
+        // make sure to add compileSourceRoots also during configuration build in m2e context
+        if (isForTest()) {
+            project.addTestCompileSourceRoot(getOutputDirectory().getAbsolutePath());
+        } else {
+            project.addCompileSourceRoot(getOutputDirectory().getAbsolutePath());
+        }
+
+        if (stale) {
             Set<File> sourceDirectories = getSourceDirectories();
             getLog().debug("Using build context: " + buildContext);
 
